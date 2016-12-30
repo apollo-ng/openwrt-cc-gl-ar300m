@@ -1,0 +1,15 @@
+#!/bin/bash
+
+MAC=$1
+TYPE=$2
+SSID=$3
+
+[[ "$(uci get reporting.settings.tracking)" == "1" ]] && {
+	[[ "$TYPE" == "0" ]] && {
+	    echo "$(date): Probe request from $MAC for SSID '$SSID'" >> /tmp/tracking.report
+	} || {
+	    echo "$(date): Association from $MAC to SSID '$SSID'" >> /tmp/tracking.report
+	}
+}
+
+/etc/pineapple/tracking_script_user $1 $2 "$3"

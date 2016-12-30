@@ -1,0 +1,151 @@
+#!/usr/bin/php-cgi -q
+<?php
+
+function enableMonitorInterface($interface)
+{
+    if (exec("ifconfig -a | grep {$interface}") == "") {
+        exec("airmon-ng start wlan1");
+    }
+}
+
+function scanForAccessPoints($interface)
+{
+    exec("bash -c 'for i in {1..5}; do iw {$interface} scan; sleep 1; done;'", $iw_scan_results);
+    $iw_scan_results = implode($iw_scan_results, "\n");
+
+    $scan = preg_split("/^BSS /m", $iw_scan_results);
+
+    foreach ($scan as $ap) {
+        if ($ap == "") {
+            continue;
+        }
+        $ap = explode("\n", $ap);
+        $address = strtoupper(substr($ap[0], 0, 17));
+        $ap_list[$address] = array();
+        foreach ($ap as $line) {
+            $line = trim($line);
+            if (strpos($line, "SSID:") >= -1) {
+                $ap_list[$address]['ESSID'] = htmlspecialchars(substr($line, 6));
+                if (preg_match("/^(\\\\x00)*$/", $ap_list[$address]['ESSID'])) {
+                    $ap_list[$address]['ESSID'] = '';
+                }
+            } elseif (strpos($line, "DS Parameter set:") >= -1) {
+                $ap_list[$address]['channel'] = substr($line, 26);
+            } elseif (strpos($line, "signal:") >= -1) {
+                $ap_list[$address]['signal'] = substr($line, 8);
+                $quality = 2*(substr($line, 8, -4)+100);
+                if ($quality >= 100) {
+                    $quality = 100;
+                }
+                if ($quality <= 0) {
+                    $quality = 0;
+                }
+                $ap_list[$address]['quality'] = $quality."%";
+            } elseif (strpos($line, "Privacy") >= -1) {
+                if (!is_array($ap_list[$address]['security'])) {
+                    $ap_list[$address]['security'] = array();
+                }
+                $ap_list[$address]['security']['WEP'] = true;
+            } elseif (strpos($line, "RSN:") >= -1) {
+                unset($ap_list[$address]['security']['WEP']);
+                $security = "WPA2";
+                $ap_list[$address]['security'][$security] = array();
+            } elseif (strpos($line, "WPA:") >= -1) {
+                unset($ap_list[$address]['security']['WEP']);
+                $security = "WPA";
+                $ap_list[$address]['security'][$security] = array();
+            } elseif (strpos($line, "Pairwise ciphers") >= -1) {
+                if (strpos($line, "CCMP") !== false) {
+                    $ap_list[$address]['security'][$security]["ccmp"] = true;
+                }
+                if (strpos($line, "TKIP") !== false) {
+                    $ap_list[$address]['security'][$security]["tkip"] = true;
+                }
+            }
+        }
+    }
+    return $ap_list;
+}
+
+function scanForClients($interface, $duration)
+{
+    $station_array = array();
+    exec("pinesniffer {$interface} {$duration} /tmp/site_survey.stations");
+    $station_csv = explode("\n", trim(file_get_contents("/tmp/site_survey.stations")));
+
+    foreach ($station_csv as $station_line) {
+        $station_line = explode(", ", $station_line);
+        $station = $station_line[0];
+        $ap = $station_line[1];
+
+        if (!isset($station_array[$ap])) {
+            $station_array[$ap] = array();
+        }
+        array_push($station_array[$ap], $station);
+    }
+
+    unlink("/tmp/site_survey.stations");
+
+    return $station_array;
+}
+
+function generateReport($ap_list, $client_list)
+{
+    foreach ($ap_list as $ap_mac => $ap_data) {
+        echo "{$ap_mac}\n";
+        echo "\tESSID: {$ap_data['ESSID']}\n";
+        echo "\tSecurity: ";
+        if (isset($ap_data['security'])) {
+            if (isset($ap_data['security']['WPA2'])) {
+                echo "WPA2\n";
+            } elseif (isset($ap_data['security']['WPA'])) {
+                echo "WPA\n";
+            } elseif ($ap_data['security']['WEP']) {
+                echo "WEP\n";
+            } else {
+                echo "unknown\n";
+            }
+        } else {
+            echo "Open\n";
+        }
+        echo "\tSignal: {$ap_data['quality']}\n";
+        echo "\tChannel: {$ap_data['channel']}\n";
+
+        echo "\tClients:\n";
+        if (isset($client_list[trim($ap_mac)])) {
+            foreach ($client_list[$ap_mac] as $client_mac) {
+                echo "\t\t{$client_mac}\n";
+            }
+        } else {
+            echo "\t\tNo clients detected\n";
+        }
+        echo "\n";
+    }
+    if (isset($client_list['FF:FF:FF:FF:FF:FF'])) {
+        echo "Unassociated Clients:\n";
+        foreach ($client_list['FF:FF:FF:FF:FF:FF'] as $client_mac) {
+            echo "\t{$client_mac}\n";
+        }
+    }
+}
+
+function siteSurvey($duration)
+{
+    enableMonitorInterface("wlan1mon");
+    $ap_list = scanForAccessPoints("wlan0");
+    $client_list = scanForClients("wlan1mon", $duration);
+
+    generateReport($ap_list, $client_list);
+}
+
+
+if (count($argv) > 1) {
+    $duration = intval($argv[1]);
+    if (!(300 >= $duration && $duration >= 15)) {
+        $duration = 15;
+    }
+    siteSurvey($duration);
+} else {
+    echo "\nUsage: site_survey [duration in seconds]\n\n";
+    exit(1);
+}

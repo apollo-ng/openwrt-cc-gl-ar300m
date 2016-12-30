@@ -1,0 +1,29 @@
+#!/usr/bin/php-cgi -q
+<?php
+
+$mac_array = array();
+
+$pineap_log = fopen("/tmp/pineap.log", "r");
+while (($line = fgets($pineap_log)) !== false) {
+    if (strpos($line, "Probe") !== 0) {
+        $mac = substr($line, 36, 17);
+        $ssid = substr($line, 36+28, -2);
+
+        if (!isset($mac_array[$mac])) {
+            $mac_array[$mac] = array();
+        }
+
+        if (!in_array($ssid, $mac_array[$mac])) {
+            array_push($mac_array[$mac], $ssid);
+        }
+
+    }
+}
+
+foreach ($mac_array as $mac => $ssid_array) {
+    echo  "{$mac}\t";
+    foreach ($ssid_array as $ssid) {
+        echo "{$ssid}\t";
+    }
+    echo "\n";
+}

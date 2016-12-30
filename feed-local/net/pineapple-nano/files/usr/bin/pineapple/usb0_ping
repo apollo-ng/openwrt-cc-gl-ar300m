@@ -1,0 +1,9 @@
+#!/bin/bash
+
+DEF_ROUTE=$1
+
+while true; do
+        ifconfig | grep usb0 -q || exit
+        echo -e "<?php\n\$sock = @fsockopen('$DEF_ROUTE', 13337, \$errno, \$errstr, 0.1);\n@fclose($sock);" | /usr/bin/php-cgi -q
+        sleep 3
+done

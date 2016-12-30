@@ -1,0 +1,10 @@
+#!/usr/bin/php-cgi
+<?php
+$counter = 0;
+while (true) {
+    file_put_contents("/sys/class/leds/pineapple:blue:system/brightness", "0");
+    usleep(500000);
+    file_put_contents("/sys/class/leds/pineapple:blue:system/brightness", "255");
+    $counter += 1;
+    usleep(500000);
+}
