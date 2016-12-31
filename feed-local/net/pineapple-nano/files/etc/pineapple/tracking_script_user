@@ -1,6 +1,0 @@
-#!/bin/bash
-
-MAC=$1
-TYPE=$2 # 0 PROBE; 1 ASSOCIATION
-SSID=$3
-

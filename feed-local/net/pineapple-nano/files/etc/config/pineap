@@ -1,9 +1,0 @@
-config pineap autostart
-	option enabled '1'
-	option karma '0'
-	option log_probes '0'
-	option log_associations '0'
-	option pineap '0'
-	option harvester '0'
-	option beacon_responses '0'
-	option dogma '0'
